@@ -408,7 +408,8 @@ void serve_head_handler(int client_fd, HTTPContext *context)
     sprintf(buff, "HTTP/1.1 200 OK\r\n");
     sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
     sprintf(buff, "%sDate: %s\r\n", buff, date);
-    if (!context->keep_alive) sprintf(buff, "%sConnection: keep-alive\r\n", buff);
+    if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
+    else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
     sprintf(buff, "%sContent-Length: %lld\r\n", buff, sbuf.st_size);
     sprintf(buff, "%sContent-Type: %s\r\n", buff, filetype);
     sprintf(buff, "%sCache-Control: no-cache\r\n", buff);
@@ -448,6 +449,7 @@ void serve_post_handler(int client_fd, HTTPContext *context)
     sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
     sprintf(buff, "%sDate: %s\r\n", buff, date);
     if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
+    else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
     sprintf(buff, "%sContent-Length: 0\r\n", buff);
     sprintf(buff, "%sContent-Type: text/html\r\n\r\n", buff);
     send(client_fd, buff, strlen(buff), 0);
