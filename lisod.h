@@ -29,14 +29,17 @@
 #define BUFF_SIZE     8192
 #define MIN_LINE      64
 
+/* this data struture wraps some attributes used to manage a pool of connected 
+ * clients. (originally from CSAPP)*/
+
 typedef struct {
-    int maxfd;
-    int nready;
-    int maxi;
-    int clientfd[FD_SETSIZE];
-    fd_set read_set;
-    fd_set ready_set;
-	char *www;
+    int maxfd;                   // Largest descriptor in read_set
+    int nready;			 // Number of ready descriptors from select
+    int maxi;			 // Highwater index into client array
+    int clientfd[FD_SETSIZE];    // Set of active client descriptors
+    fd_set read_set;		 // Set of all active descriptors
+    fd_set ready_set;		 // Subset of descriptors ready for reading
+    char *www;			 // Set of active read buffers
 } pool;
 
 #endif

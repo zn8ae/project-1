@@ -35,6 +35,7 @@ void print_time(FILE *fp) {
     );
 }
 
+// … is called an “ellipsis”, and it means, in plain English: “any number of optional arguments can go here.”
 void Log(FILE *fp, char *msg, ...) {
     print_time(fp);
     va_list ap;

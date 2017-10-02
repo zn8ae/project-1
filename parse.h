@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "liso.h"
+#include "lisod.h"
 
 #define SUCCESS 0
 #define FIELD_SIZE    4096
@@ -26,10 +26,11 @@ typedef struct
 	int header_count;
 } Request;
 
+// this datastructure wraps some attributes used for processing HTTP requests 
 typedef struct {
-    int  content_len;
     int  keep_alive;
     int  is_valid;
+    int  content_len;
     char method[FIELD_SIZE];
     char version[FIELD_SIZE];
     char uri[FIELD_SIZE];
