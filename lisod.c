@@ -70,7 +70,6 @@ int main(int argc, char* argv[])
     Log(fp, "Start Liso Server\n");
 
     listen_sock = open_listen_socket(http_port); 
-                                                    *
     // purpose:    setup the initial value for pool attributes                     
     // parameters: sock - the descriptor server using to listen client connections 
     //             p    - pointer to pool instance                                                                                            *
