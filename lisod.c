@@ -49,11 +49,11 @@ int main(int argc, char* argv[])
     int http_port;
 
     // input argument must be 4
-    if (argc != ARG_NUMBER + 1)
-    {
-        fprintf(stderr, "usage: ./lisod <HTTP port> <log file> <www folder>\n");
-    	exit(EXIT_FAILURE);
-    }
+    // if (argc != ARG_NUMBER + 1)
+    // {
+    //     fprintf(stderr, "usage: ./lisod <HTTP port> <log file> <www folder>\n");
+    // 	exit(EXIT_FAILURE);
+    // }
 
     // extract http port number from the first argument
     http_port = atoi(argv[1]);
