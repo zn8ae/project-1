@@ -1,0 +1,5 @@
+## HTTP/1.1 Server LISO
+
+A http/1.1 server implemented in C using socket programming. 
+
+support HEAD, GET, POST, serve static file, log.
