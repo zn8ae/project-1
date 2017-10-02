@@ -1,5 +1,5 @@
-#ifndef _LISO_H_
-#define _LISO_H_
+#ifndef _LISOD_H_
+#define _LISOD_H_
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
