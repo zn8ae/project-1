@@ -1,0 +1,41 @@
+
+Tests:
+1. Telnet in terminal
+	   1) Test goal: test the server can return proper response
+	   2) Test procedures:
+	      1. connect server 
+	         telnet 127.0.0.1 8080 
+	      2. send requests
+	         GET / HTTP/1.1    # return 200 OK and index.html
+		 HEAD / HTTP/1.1   # return 200 OK proper header info
+	         GET / HTTP/1.0    # return 505 HTTP Version Not Supported
+	         GET /foo HTTP/1.1 # return 404 Not Found
+                 POST / HTTP/1.1   # return 411 Length Required 
+		 etc…
+
+	
+2. SMOKE test
+	   1) Test goal: server compiles with no error and can return message from the
+	      client upon first run
+	   2) Test procedures:
+	      a) compile programs by make
+	      b) run server
+	      c) run client
+	      d) test echo function
+	         Command: 'this a SMOKE test'
+	         and see the same string get returned.
+
+3. Stress test
+	   1) Test goal: Apache Bench to test the maximum connections server can handle
+	   2) Test procedures:
+	      a) compile program by make 
+	      b) use ab -n 100 -c 10 http://127.0.0.1:8080/ 
+	      c) see test results and view lisod.log.
+
+
+Vulnerabilities:
+1. Server cannot handle when there are too many connections (more than 1020).
+2. Server can only accept certain types of requests 
+3. Can only accept limited number of filetype for HEAD request
+4. Can only support limited HTTP version
+

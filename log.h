@@ -1,8 +1,3 @@
-//
-// Created by 甘宏 on 08/02/2017.
-//
-
-
 #ifndef _LOG_H_
 #define _LOG_H_
 

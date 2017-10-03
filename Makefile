@@ -1,15 +1,3 @@
-################################################################################
-# Makefile                                                                     #
-#                                                                              #
-# Description: This file contains the make rules for Recitation 1.             #
-#                                                                              #
-# Authors: Athula Balachandran <abalacha@cs.cmu.edu>,                          #
-#          Wolf Richter <wolf@cs.cmu.edu>                                      #
-#                                                                              #
-################################################################################
-
-
-
 CC=gcc
 CFLAGS=-I.
 DEPS = parse.h y.tab.h log.h

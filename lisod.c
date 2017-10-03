@@ -2,15 +2,15 @@
 
 #define LISTENQ 1024
 
-/* server basic subroutine */
-int open_socket(int port);
+// server basic subroutine 
+int open_socket(int http_port);
 int close_socket(int id, pool *pool);
 void init_pool(int listen_fd, pool *pool);
 void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr);
 void handle_clients(pool *pool);
 void process_request(int i, pool *pool, HTTPContext *context);
 
-/* server request handler */
+// server request handler 
 void serve_request_handler(int client_fd, HTTPContext *context);
 void serve_get_handler(int client_fd, HTTPContext *context);
 void serve_head_handler(int client_fd, HTTPContext *context);
@@ -18,11 +18,11 @@ int serve_body_handler(int client_fd, HTTPContext *context);
 void serve_post_handler(int client_fd, HTTPContext *context);
 void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char *shortmsg, char *longmsg);
 
-/* request parser methods */
+// parser methods 
 int parse_uri(pool *pool, char *uri, char* filename);
 int parse_header(int socket_fd, Request *request, HTTPContext *context);
 
-/* util methods */
+// util methods 
 void get_time(char *date);
 void get_filetype(char *filename, char *filetype);
 int is_valid_method(char *method);
@@ -33,17 +33,12 @@ FILE *fp;
 
 
 // server basic subroutine 
-int open_socket(int port) {
+int open_socket(int http_port) {
     int sock_fd;
     struct sockaddr_in addr;
     int yes = 1;
     // create a socket 
     // int sockfd = socket(domain, type, protocol)
-    // domain: integer, communication domain e.g., AF_INET (IPv4 protocol) , AF_INET6 (IPv6 protocol)
-    // type: communication type
-    // SOCK_STREAM: TCP(reliable, connection oriented)
-    // SOCK_DGRAM: UDP(unreliable, connectionless)
-    // protocol: Protocol value for Internet Protocol(IP), which is 0. This is the same number which appears on protocol field in the IP header of a packet.(man protocols for more details)
     // So the correct thing to do is to use AF_INET in your struct sockaddr_in and PF_INET in your call to socket()
     sock_fd = socket(PF_INET, SOCK_STREAM, 0);
     if (sock_fd == -1) {
@@ -57,13 +52,13 @@ int open_socket(int port) {
         return EXIT_FAILURE;
     }
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+    addr.sin_port = htons(http_port);
     addr.sin_addr.s_addr = INADDR_ANY;
     // servers bind sockets to ports---notify the OS they accept connections 
     // The bind function assigns a local protocol address to a socket
     if (bind(sock_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         close(sock_fd);
-        Log(fp, "Fail to bind socket\n");
+        Log(fp, "Fail to bind to socket\n");
         return EXIT_FAILURE;
     }
     // The listen function is called only by a TCP server to listen for the client request
@@ -90,9 +85,8 @@ int close_socket(int id, pool *pool) {
 void init_pool(int listen_fd, pool *pool) {
     int i = 0;
     pool->maxi = -1;
-    for (i = 0; i < FD_SETSIZE; i++) {
-        pool->clientfd[i] = -1;
-    }
+    for (i = 0; i < FD_SETSIZE; i++) 
+        pool->clientfd[i] = -1;  
     pool->maxfd = listen_fd;
     // Initializes the file descriptor set fdset to have zero bits for all file descriptors
     FD_ZERO(&pool->read_set);
@@ -102,7 +96,7 @@ void init_pool(int listen_fd, pool *pool) {
 
 // add a new client to the pool and update pool attributes                                             
 void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr) {
-    int i;
+    int i = 0;
     pool->nready--;
     // only accept FD_SETSIZE - 5 clients to keep server from overloading
     for (i = 0; i < (FD_SETSIZE - 5); i++) {
@@ -127,7 +121,7 @@ void handle_clients(pool *pool) {
     for (i = 0; (i <= pool->maxi) && (pool->nready > 0); i++) {
         cur_fd = pool->clientfd[i];
         if ((cur_fd > 0) && (FD_ISSET(cur_fd, &pool->ready_set))) {
-            pool-> nready--;
+            pool->nready--;
             HTTPContext *context = (HTTPContext *)calloc(1, sizeof(HTTPContext));
             context->keep_alive = 1;
             context->is_valid = 1;
@@ -142,28 +136,28 @@ void handle_clients(pool *pool) {
 
 // handle a single request and return responses                    
 void process_request(int i, pool *pool, HTTPContext *context) {
-    int nbytes;
+    int data;
     char filename[BUFF_SIZE], buf[BUFF_SIZE];
     struct stat sbuf;
     int cur_fd = pool->clientfd[i];
     // The recv function is used to receive data over stream sockets or CONNECTED datagram sockets
     // read data using ith socket and stored information in buffer
-    nbytes = recv(cur_fd, buf, BUFF_SIZE, 0);
-    if (nbytes == 0) {
+    data = recv(cur_fd, buf, BUFF_SIZE, 0);
+    if (data == 0) {
         return;
     }
-    if (nbytes < 0) {
+    if (data < 0) {
         context->keep_alive = 0;
         Log(fp, "Error occurred when receiving data from client\n");
         serve_error_handler(cur_fd, context, "500", "Internal Server Error", "The server has encountered an unexpected error.");
         return;
     }
-    Log(fp, "Server received %d bytes data on socket %d\n", (int)nbytes, cur_fd);
+    Log(fp, "Server received %d bytes data on socket %d\n", (int)data, cur_fd);
     // parser handle the grammar check in request data 
-    Request *request = parse(buf, nbytes, context);
+    Request *request = parse(buf, data, context);
     if (!context->is_valid) {
         context->keep_alive = 0;
-        serve_error_handler(cur_fd, context, "400", "Bad Request", "The request line and header has error");
+        serve_error_handler(cur_fd, context, "400", "Bad Request", "The request line or header has error");
     }
     strcpy(context->method, request->http_method);
     strcpy(context->version, request->http_version);
@@ -185,7 +179,7 @@ void process_request(int i, pool *pool, HTTPContext *context) {
     strcpy(context->filename, filename);
     if (stat(context->filename, &sbuf) < 0) {
         context->keep_alive = 0;
-        serve_error_handler(cur_fd, context, "404", "Not Found", "File is not found on Liso Server");
+        serve_error_handler(cur_fd, context, "404", "Page Not Found", "File is not found on Liso Server");
         return;
     }
     // parse request headers
@@ -249,7 +243,7 @@ int serve_body_handler(int client_fd, HTTPContext *context) {
     filesize = sbuf.st_size;
     ptr = mmap(0, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
-    int nbytes = send(client_fd, ptr, filesize, 0);
+    int data = send(client_fd, ptr, filesize, 0);
     munmap(ptr, filesize);
     return 0;
 }
@@ -297,7 +291,7 @@ int parse_uri(pool *pool, char *uri, char* filename) {
         return 0;
     }
     char *pt = uri;
-    while (*pt == '.' || *pt == '/') {pt++;}
+    while (*pt == '/' || *pt == '.') {pt++;}
     strcat(filename, pt);
     return 0;
 }
