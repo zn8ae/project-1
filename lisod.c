@@ -85,8 +85,7 @@ int close_socket(int id, pool *pool) {
 void init_pool(int listen_fd, pool *pool) {
     int i = 0;
     pool->maxi = -1;
-    for (i = 0; i < FD_SETSIZE; i++) 
-        pool->clientfd[i] = -1;  
+    for (i = 0; i < FD_SETSIZE; i++) pool->clientfd[i] = -1;  
     pool->maxfd = listen_fd;
     // Initializes the file descriptor set fdset to have zero bits for all file descriptors
     FD_ZERO(&pool->read_set);
@@ -106,10 +105,10 @@ void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr) 
 	    // add the descriptor to the descriptor set
             FD_SET(client_socket, &pool->read_set);
 	    // update max descriptor and pool highwater mark
-            if (client_socket > pool->maxfd)
-                pool->maxfd = client_socket;
             if (i > pool->maxi)
                 pool->maxi = i;
+            if (client_socket > pool->maxfd)
+                pool->maxfd = client_socket;
             break;
         }
     }
@@ -118,7 +117,7 @@ void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr) 
 // process the ready set from the set of descriptors                                                  
 void handle_clients(pool *pool) {
     int i, cur_fd;
-    for (i = 0; (i <= pool->maxi) && (pool->nready > 0); i++) {
+    for (i = 0; (pool->nready > 0)&&!(i > pool->maxi); i++) {
         cur_fd = pool->clientfd[i];
         if ((cur_fd > 0) && (FD_ISSET(cur_fd, &pool->ready_set))) {
             pool->nready--;
@@ -243,7 +242,8 @@ int serve_body_handler(int client_fd, HTTPContext *context) {
     filesize = sbuf.st_size;
     ptr = mmap(0, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
-    int data = send(client_fd, ptr, filesize, 0);
+    //notebook
+    send(client_fd, ptr, filesize, 0);
     munmap(ptr, filesize);
     return 0;
 }
