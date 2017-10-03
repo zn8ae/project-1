@@ -1,41 +1,40 @@
 #include "lisod.h"
 
-// #define ARG_NUMBER 3
 #define LISTENQ 1024
 
 /* server basic subroutine */
-int  open_listen_socket(int port);
-int  close_client_socket(int id, pool *p);
-void init_pool(int listenfd, pool *p);
-void add_client(int newfd, pool *p, struct sockaddr_in *cli_addr);
-void handle_clients(pool *p);
-void process_request(int i, pool *p, HTTPContext *context);
+int open_socket(int port);
+int close_socket(int id, pool *pool);
+void init_pool(int listen_fd, pool *pool);
+void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr);
+void handle_clients(pool *pool);
+void process_request(int i, pool *pool, HTTPContext *context);
 
 /* server request handler */
 void serve_request_handler(int client_fd, HTTPContext *context);
 void serve_get_handler(int client_fd, HTTPContext *context);
 void serve_head_handler(int client_fd, HTTPContext *context);
-int  serve_body_handler(int client_fd, HTTPContext *context);
+int serve_body_handler(int client_fd, HTTPContext *context);
 void serve_post_handler(int client_fd, HTTPContext *context);
 void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char *shortmsg, char *longmsg);
 
 /* request parser methods */
-int  parse_uri(pool *p, char *uri, char* filename);
-int  parse_header(int socketfd, Request *request, HTTPContext *context);
+int parse_uri(pool *pool, char *uri, char* filename);
+int parse_header(int socket_fd, Request *request, HTTPContext *context);
 
 /* util methods */
 void get_time(char *date);
 void get_filetype(char *filename, char *filetype);
-int  is_valid_method(char *method);
+int is_valid_method(char *method);
 char *get_header_value_by_key(char *key, Request *request);
 
 /* file pointer to write log */
 FILE *fp;
 
-/* server basic subroutine */
 
-int  open_listen_socket(int port) {
-    int sockfd;
+// server basic subroutine 
+int open_socket(int port) {
+    int sock_fd;
     struct sockaddr_in addr;
     int yes = 1;
     // create a socket 
@@ -46,15 +45,15 @@ int  open_listen_socket(int port) {
     // SOCK_DGRAM: UDP(unreliable, connectionless)
     // protocol: Protocol value for Internet Protocol(IP), which is 0. This is the same number which appears on protocol field in the IP header of a packet.(man protocols for more details)
     // So the correct thing to do is to use AF_INET in your struct sockaddr_in and PF_INET in your call to socket()
-    sockfd = socket(PF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        Log(fp, "Fail to create socket\n");
+    sock_fd = socket(PF_INET, SOCK_STREAM, 0);
+    if (sock_fd == -1) {
+        Log(fp, "Fail to create new socket\n");
         return EXIT_FAILURE;
     }
     // This helps in manipulating options for the socket referred by the file descriptor sockfd. 
     // This is completely optional, but it helps in reuse of address and port. Prevents error such as: “address already in use”.
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-        Log(fp, "Fail to set socketopt\n");
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        Log(fp, "Fail to set up socketopt\n");
         return EXIT_FAILURE;
     }
     addr.sin_family = AF_INET;
@@ -62,79 +61,79 @@ int  open_listen_socket(int port) {
     addr.sin_addr.s_addr = INADDR_ANY;
     // servers bind sockets to ports---notify the OS they accept connections 
     // The bind function assigns a local protocol address to a socket
-    if (bind(sockfd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        close(sockfd);
+    if (bind(sock_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+        close(sock_fd);
         Log(fp, "Fail to bind socket\n");
         return EXIT_FAILURE;
     }
     // The listen function is called only by a TCP server to listen for the client request
-    if (listen(sockfd, LISTENQ) < 0) {
-        close(sockfd);
+    if (listen(sock_fd, LISTENQ) < 0) {
+        close(sock_fd);
         Log(fp, "Fail to listen on socket\n");
         return EXIT_FAILURE;
     }
-    return sockfd;
+    return sock_fd;
 }
 
-int close_client_socket(int id, pool *p) {
-    FD_CLR(p->clientfd[id], &p->read_set);
-    if (close(p->clientfd[id]) < 0) {
+int close_socket(int id, pool *pool) {
+    FD_CLR(pool->clientfd[id], &pool->read_set);
+    if (close(pool->clientfd[id]) < 0) {
         Log(fp, "Failed closing socket.\n");
         return 1;
     }
-    Log(fp, "Close connection to client on socket: %d.\n", p->clientfd[id]);
-    p->clientfd[id] = -1;
+    Log(fp, "Close connection to client on socket: %d.\n", pool->clientfd[id]);
+    pool->clientfd[id] = -1;
     return 0;
 }
 
 // setup the initial value for pool attributes                      
-void init_pool(int listenfd, pool *p) {
+void init_pool(int listen_fd, pool *pool) {
     int i = 0;
-    p->maxi = -1;
+    pool->maxi = -1;
     for (i = 0; i < FD_SETSIZE; i++) {
-        p->clientfd[i] = -1;
+        pool->clientfd[i] = -1;
     }
-    p->maxfd = listenfd;
+    pool->maxfd = listen_fd;
     // Initializes the file descriptor set fdset to have zero bits for all file descriptors
-    FD_ZERO(&p->read_set);
+    FD_ZERO(&pool->read_set);
     // Sets the bit for the file descriptor fd in the file descriptor set fdset
-    FD_SET(listenfd, &p->read_set);
+    FD_SET(listen_fd, &pool->read_set);
 }
 
 // add a new client to the pool and update pool attributes                                             
-void add_client(int client_socket, pool *p, struct sockaddr_in *cli_addr) {
+void add_client(int client_socket, pool *pool, struct sockaddr_in *client_addr) {
     int i;
-    p->nready--;
+    pool->nready--;
     // only accept FD_SETSIZE - 5 clients to keep server from overloading
     for (i = 0; i < (FD_SETSIZE - 5); i++) {
-        if (p->clientfd[i] < 0) {
+        if (pool->clientfd[i] < 0) {
             // add client descriptor to the pool
-            p->clientfd[i] = client_socket;
+            pool->clientfd[i] = client_socket;
 	    // add the descriptor to the descriptor set
-            FD_SET(client_socket, &p->read_set);
+            FD_SET(client_socket, &pool->read_set);
 	    // update max descriptor and pool highwater mark
-            if (client_socket > p->maxfd)
-                p->maxfd = client_socket;
-            if (i > p->maxi)
-                p->maxi = i;
+            if (client_socket > pool->maxfd)
+                pool->maxfd = client_socket;
+            if (i > pool->maxi)
+                pool->maxi = i;
             break;
         }
     }
 }
                                                    
 // process the ready set from the set of descriptors                                                  
-void handle_clients(pool *p) {
-    int i, curfd;
-    for (i = 0; (i <= p->maxi) && (p->nready > 0); i++) {
-        curfd = p->clientfd[i];
-        if ((curfd > 0) && (FD_ISSET(curfd, &p->ready_set))) {
-            p -> nready--;
+void handle_clients(pool *pool) {
+    int i, cur_fd;
+    for (i = 0; (i <= pool->maxi) && (pool->nready > 0); i++) {
+        cur_fd = pool->clientfd[i];
+        if ((cur_fd > 0) && (FD_ISSET(cur_fd, &pool->ready_set))) {
+            pool-> nready--;
             HTTPContext *context = (HTTPContext *)calloc(1, sizeof(HTTPContext));
             context->keep_alive = 1;
             context->is_valid = 1;
-            process_request(i, p, context);
+            process_request(i, pool, context);
             if (!context->keep_alive) {
-                close_client_socket(i, p);
+                close_socket(i, pool);
             }
             free(context);
         }
@@ -142,29 +141,29 @@ void handle_clients(pool *p) {
 }
 
 // handle a single request and return responses                    
-void process_request(int i, pool *p, HTTPContext *context) {
+void process_request(int i, pool *pool, HTTPContext *context) {
     int nbytes;
     char filename[BUFF_SIZE], buf[BUFF_SIZE];
     struct stat sbuf;
-    int curfd = p->clientfd[i];
+    int cur_fd = pool->clientfd[i];
     // The recv function is used to receive data over stream sockets or CONNECTED datagram sockets
     // read data using ith socket and stored information in buffer
-    nbytes = recv(curfd, buf, BUFF_SIZE, 0);
+    nbytes = recv(cur_fd, buf, BUFF_SIZE, 0);
     if (nbytes == 0) {
         return;
     }
     if (nbytes < 0) {
         context->keep_alive = 0;
         Log(fp, "Error occurred when receiving data from client\n");
-        serve_error_handler(curfd, context, "500", "Internal Server Error", "The server encountered unexpected error.");
+        serve_error_handler(cur_fd, context, "500", "Internal Server Error", "The server has encountered an unexpected error.");
         return;
     }
-    Log(fp, "Server received %d bytes data on socket %d\n", (int)nbytes, curfd);
+    Log(fp, "Server received %d bytes data on socket %d\n", (int)nbytes, cur_fd);
     // parser handle the grammar check in request data 
     Request *request = parse(buf, nbytes, context);
     if (!context->is_valid) {
         context->keep_alive = 0;
-        serve_error_handler(curfd, context, "400", "Bad Request", "The request line and header has error");
+        serve_error_handler(cur_fd, context, "400", "Bad Request", "The request line and header has error");
     }
     strcpy(context->method, request->http_method);
     strcpy(context->version, request->http_version);
@@ -172,27 +171,27 @@ void process_request(int i, pool *p, HTTPContext *context) {
     // check HTTP method (support GET, POST, HEAD now)
     if (!is_valid_method(request->http_method)) {
         context->keep_alive = 0;
-        serve_error_handler(curfd, context, "501", "Not Implemented", "HTTP method is not implemented by the server");
+        serve_error_handler(cur_fd, context, "501", "Method Unimplemented", "HTTP method is not implemented by the server");
         return;
     }
     // check HTTP version
     if (strcasecmp(context->version, "HTTP/1.1")) {
         context->keep_alive = 0;
-        serve_error_handler(curfd, context, "505", "HTTP Version not supported", "The current http version HTTP/1.0 is not supported by Liso server");
+        serve_error_handler(cur_fd, context, "505", "HTTP Version not supported", "The current http version HTTP/1.0 is not supported by Liso server");
         return;
     }
     // parse uri (get filename and parameters if any)
-    parse_uri(p, request->http_uri, filename);
+    parse_uri(pool, request->http_uri, filename);
     strcpy(context->filename, filename);
     if (stat(context->filename, &sbuf) < 0) {
         context->keep_alive = 0;
-        serve_error_handler(curfd, context, "404", "Not Found", "File not found on Liso Server");
+        serve_error_handler(cur_fd, context, "404", "Not Found", "File is not found on Liso Server");
         return;
     }
     // parse request headers
-    if (parse_header(curfd, request, context) != 0) return;
+    if (parse_header(cur_fd, request, context) != 0) return;
     // send response
-    serve_request_handler(curfd, context);
+    serve_request_handler(cur_fd, context);
     return;
 }
 
@@ -213,7 +212,7 @@ void serve_get_handler(int client_fd, HTTPContext *context) {
 void serve_head_handler(int client_fd, HTTPContext *context) {
     struct tm tm;
     struct stat sbuf;
-    char buff[BUFF_SIZE];
+    char buffer[BUFF_SIZE];
     char filetype[MIN_LINE];
     char tbuf[DATE_SIZE];
     char date[DATE_SIZE];
@@ -224,16 +223,16 @@ void serve_head_handler(int client_fd, HTTPContext *context) {
     strftime(tbuf, DATE_SIZE, "%a, %d %b %Y %H:%M:%S GMT", &tm);
     get_time(date);
     // HTTP response header
-    sprintf(buff, "HTTP/1.1 200 OK\r\n");
-    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
-    sprintf(buff, "%sDate: %s\r\n", buff, date);
-    if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
-    else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
-    sprintf(buff, "%sContent-Length: %lld\r\n", buff, sbuf.st_size);
-    sprintf(buff, "%sContent-Type: %s\r\n", buff, filetype);
-    sprintf(buff, "%sCache-Control: no-cache\r\n", buff);
-    sprintf(buff, "%sLast-Modified: %s\r\n\r\n", buff, tbuf);
-    send(client_fd, buff, strlen(buff), 0);
+    sprintf(buffer, "HTTP/1.1 200 OK\r\n");
+    sprintf(buffer, "%sServer: Liso/1.0\r\n", buffer);
+    sprintf(buffer, "%sDate: %s\r\n", buffer, date);
+    if (!context->keep_alive) sprintf(buffer, "%sConnection: close\r\n", buffer);
+    else sprintf(buffer, "%sConnection: keep-alive\r\n", buffer);
+    sprintf(buffer, "%sContent-Length: %lld\r\n", buffer, sbuf.st_size);
+    sprintf(buffer, "%sContent-Type: %s\r\n", buffer, filetype);
+    sprintf(buffer, "%sCache-Control: no-cache\r\n", buffer);
+    sprintf(buffer, "%sLast-Modified: %s\r\n\r\n", buffer, tbuf);
+    send(client_fd, buffer, strlen(buffer), 0);
 }
 
 // return response body to client
@@ -257,22 +256,22 @@ int serve_body_handler(int client_fd, HTTPContext *context) {
 
 // return response for POST request
 void serve_post_handler(int client_fd, HTTPContext *context) {
-    char buff[BUFF_SIZE];
+    char buffer[BUFF_SIZE];
     char date[DATE_SIZE];
     get_time(date);
-    sprintf(buff, "HTTP/1.1 200 No Content\r\n");
-    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
-    sprintf(buff, "%sDate: %s\r\n", buff, date);
-    if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
-    else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
-    sprintf(buff, "%sContent-Length: 0\r\n", buff);
-    sprintf(buff, "%sContent-Type: text/html\r\n\r\n", buff);
-    send(client_fd, buff, strlen(buff), 0);
+    sprintf(buffer, "HTTP/1.1 200 No Content\r\n");
+    sprintf(buffer, "%sServer: Liso/1.0\r\n", buffer);
+    sprintf(buffer, "%sDate: %s\r\n", buffer, date);
+    if (!context->keep_alive) sprintf(buffer, "%sConnection: close\r\n", buffer);
+    else sprintf(buffer, "%sConnection: keep-alive\r\n", buffer);
+    sprintf(buffer, "%sContent-Length: 0\r\n", buffer);
+    sprintf(buffer, "%sContent-Type: text/html\r\n\r\n", buffer);
+    send(client_fd, buffer, strlen(buffer), 0);
 }
                                                    
 // return error message to client                                     
 void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char *shortmsg, char *longmsg) {
-    char buff[BUFF_SIZE], body[BUFF_SIZE], date[BUFF_SIZE];
+    char buffer[BUFF_SIZE], body[BUFF_SIZE], date[BUFF_SIZE];
     // HTTP error response body
     sprintf(body, "<html><title>Server Error</title>");
     sprintf(body, "%s<body>\r\n", body);
@@ -280,19 +279,19 @@ void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char
     sprintf(body, "%s<br><p>%s</p></body></html>\r\n", body, longmsg);
     get_time(date);
     // HTTP error response header
-    sprintf(buff, "HTTP/1.1 %s %s\r\n", errnum, shortmsg);
-    sprintf(buff, "%sDate: %s\r\n", buff, date);
-    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
-    if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
-    sprintf(buff, "%sContent-type: text/html\r\n", buff);
-    sprintf(buff, "%sContent-length: %d\r\n\r\n", buff, (int) strlen(body));
-    send(client_fd, buff, strlen(buff), 0);
+    sprintf(buffer, "HTTP/1.1 %s %s\r\n", errnum, shortmsg);
+    sprintf(buffer, "%sDate: %s\r\n", buffer, date);
+    sprintf(buffer, "%sServer: Liso/1.0\r\n", buffer);
+    if (!context->keep_alive) sprintf(buffer, "%sConnection: close\r\n", buffer);
+    sprintf(buffer, "%sContent-type: text/html\r\n", buffer);
+    sprintf(buffer, "%sContent-length: %d\r\n\r\n", buffer, (int) strlen(body));
+    send(client_fd, buffer, strlen(buffer), 0);
     send(client_fd, body, strlen(body), 0);
 }
 
 /* request parser methods */
-int parse_uri(pool *p, char *uri, char* filename) {
-    strcpy(filename, p->www);
+int parse_uri(pool *pool, char *uri, char* filename) {
+    strcpy(filename, pool->www);
     if (uri[strlen(uri)-1] == '/') {
         strcat(filename, "index.html");
         return 0;
@@ -303,7 +302,7 @@ int parse_uri(pool *p, char *uri, char* filename) {
     return 0;
 }
 
-int parse_header(int socketfd, Request *request, HTTPContext *context) {
+int parse_header(int socket_fd, Request *request, HTTPContext *context) {
     char *value;
     if ((value = get_header_value_by_key("Connection", request)) != NULL) {
         if (strstr(value, "close")) {
@@ -324,10 +323,10 @@ void get_time(char *date) {
 
 void get_filetype(char *filename, char *filetype) {
     if (strstr(filename, ".html")) strcpy(filetype, "text/html");
-    else if (strstr(filename, ".css")) strcpy(filetype, "text/css");
     else if (strstr(filename, ".js")) strcpy(filetype, "application/javascript");
     else if (strstr(filename, ".jpg")) strcpy(filetype, "image/jpeg");
     else if (strstr(filename, ".png")) strcpy(filetype, "image/png");
+    else if (strstr(filename, ".css")) strcpy(filetype, "text/css");
     else if (strstr(filename, ".gif")) strcpy(filetype, "image/gif");
     else strcpy(filetype, "text/plain");
 }
@@ -358,11 +357,12 @@ int main(int argc, char* argv[]) {
     // Accept a connection with the accept() system call. This call typically blocks until a client connects with the server.
     // Send and receive data using the read() and write() system calls.
     int listen_sock;
-    int newfd;
-    struct sockaddr cli_addr;
-    socklen_t addrlen;
-    char* logfile;
+    int new_fd;
     int http_port;
+    char* logfile;
+    static pool pool;
+    struct sockaddr client_addr;
+    socklen_t addrlen;
     // extract http port number from the first argument
     http_port = atoi(argv[1]);
     // extract log file from the second argument
@@ -373,10 +373,9 @@ int main(int argc, char* argv[]) {
         fprintf(stdout, "There is an error happen when trying to open log file.\n");
         exit(EXIT_FAILURE);
     }
-    static pool pool;
     Log(fp, "Start Liso Server\n");
-    listen_sock = open_listen_socket(http_port); 
-    // purpose:    setup the initial value for pool attributes                                                                                                              *
+    listen_sock = open_socket(http_port); 
+    // setup the initial value for pool attributes                                                                                                              *
     init_pool(listen_sock, &pool);
     pool.www = argv[5];
     // make sure the last char of www is '/'
@@ -395,10 +394,10 @@ int main(int argc, char* argv[]) {
         // listen discriptor ready 
         // Returns a non-zero value if the bit for the file descriptor fd is set in the file descriptor set pointed to by fdset, and 0 otherwise.
         if (FD_ISSET(listen_sock, &pool.ready_set) != 0) {
-            addrlen = sizeof cli_addr;
+            addrlen = sizeof client_addr;
 	    // The accept function is called by a TCP server to return the next completed connection from the front of the completed connection queue.
-            newfd = accept(listen_sock, (struct sockaddr *)&cli_addr, &addrlen);
-            if (newfd == -1) {
+            new_fd = accept(listen_sock, (struct sockaddr *)&client_addr, &addrlen);
+            if (new_fd == -1) {
                 fprintf(stderr, "establishing new connection error\n");
                 Log(fp, "Error happened when trying to establish a new client connection.\n");
                 break;
@@ -406,7 +405,7 @@ int main(int argc, char* argv[]) {
             else {
                 // add new client to pool 
 		// add a new client to the pool and update pool attributes 
-                add_client(newfd, &pool, (struct sockaddr_in *) &cli_addr);
+                add_client(new_fd, &pool, (struct sockaddr_in *) &client_addr);
             }
         }
         handle_clients(&pool);
