@@ -1,6 +1,6 @@
 #include "lisod.h"
 
-#define ARG_NUMBER 3
+// #define ARG_NUMBER 3
 #define LISTENQ 1024
 
 /* server basic subroutine */
@@ -13,11 +13,11 @@ void process_request(int i, pool *p, HTTPContext *context);
 
 /* server request handler */
 void serve_request_handler(int client_fd, HTTPContext *context);
-void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char *shortmsg, char *longmsg);
 void serve_get_handler(int client_fd, HTTPContext *context);
 void serve_head_handler(int client_fd, HTTPContext *context);
 int  serve_body_handler(int client_fd, HTTPContext *context);
 void serve_post_handler(int client_fd, HTTPContext *context);
+void serve_error_handler(int client_fd, HTTPContext *context, char *errnum, char *shortmsg, char *longmsg);
 
 /* request parser methods */
 int  parse_uri(pool *p, char *uri, char* filename);
@@ -213,7 +213,10 @@ void serve_get_handler(int client_fd, HTTPContext *context) {
 void serve_head_handler(int client_fd, HTTPContext *context) {
     struct tm tm;
     struct stat sbuf;
-    char buff[BUFF_SIZE], filetype[MIN_LINE], tbuf[DATE_SIZE], date[DATE_SIZE];
+    char buff[BUFF_SIZE];
+    char filetype[MIN_LINE];
+    char tbuf[DATE_SIZE];
+    char date[DATE_SIZE];
     get_filetype(context->filename, filetype);
     // get modified time of file
     stat(context->filename, &sbuf);
@@ -221,15 +224,15 @@ void serve_head_handler(int client_fd, HTTPContext *context) {
     strftime(tbuf, DATE_SIZE, "%a, %d %b %Y %H:%M:%S GMT", &tm);
     get_time(date);
     // HTTP response header
-    sprintf(buff, "HTTP/1.1 200 OK\r\n"); 
+    sprintf(buff, "HTTP/1.1 200 OK\r\n");
+    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
+    sprintf(buff, "%sDate: %s\r\n", buff, date);
     if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
     else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
     sprintf(buff, "%sContent-Length: %lld\r\n", buff, sbuf.st_size);
     sprintf(buff, "%sContent-Type: %s\r\n", buff, filetype);
     sprintf(buff, "%sCache-Control: no-cache\r\n", buff);
-    sprintf(buff, "%sDate: %s\r\n", buff, date);
     sprintf(buff, "%sLast-Modified: %s\r\n\r\n", buff, tbuf);
-    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
     send(client_fd, buff, strlen(buff), 0);
 }
 
@@ -254,15 +257,16 @@ int serve_body_handler(int client_fd, HTTPContext *context) {
 
 // return response for POST request
 void serve_post_handler(int client_fd, HTTPContext *context) {
-    char buff[BUFF_SIZE], date[DATE_SIZE];
+    char buff[BUFF_SIZE];
+    char date[DATE_SIZE];
     get_time(date);
     sprintf(buff, "HTTP/1.1 200 No Content\r\n");
+    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
+    sprintf(buff, "%sDate: %s\r\n", buff, date);
     if (!context->keep_alive) sprintf(buff, "%sConnection: close\r\n", buff);
     else sprintf(buff, "%sConnection: keep-alive\r\n", buff);
     sprintf(buff, "%sContent-Length: 0\r\n", buff);
     sprintf(buff, "%sContent-Type: text/html\r\n\r\n", buff);
-    sprintf(buff, "%sDate: %s\r\n", buff, date);
-    sprintf(buff, "%sServer: Liso/1.0\r\n", buff);
     send(client_fd, buff, strlen(buff), 0);
 }
                                                    
